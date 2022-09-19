@@ -8,7 +8,7 @@ https://lapakprogrammer.com/
 
 Maintained by [ACHMAD MAULANA](https://lapakprogrammer.com/developer/achmad-maulana)
 
-# in_app_update
+# in_googleplay_update
 
 Enables In App Updates on Android using the official Android APIs.
 
