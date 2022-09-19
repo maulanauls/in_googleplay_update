@@ -1,7 +1,7 @@
 name: in_googleplay_update
 description: In App update for google play apps for Android
 version: 0.0.1
-homepage: https://github.com/maulanauls/in_app_update
+homepage: https://github.com/maulanauls/in_googleplay_update
 
 environment:
   sdk: '>=2.18.0 <3.0.0'
