@@ -36,10 +36,14 @@ enum AppUpdateResult {
 }
 
 class InAppPlayUpdate {
-  static const MethodChannel _channel = MethodChannel('in_app_playupdate');
+  static const MethodChannel _channel = MethodChannel('in_googleplay_update');
+  static const EventChannel _listener =
+      EventChannel('in_googleplay_update_event');
 
-  /// Has to be called before being able to start any update.
-  ///
+  static Stream<String> flexibleUpdateStream() {
+    return _listener.receiveBroadcastStream().map((event) => event.toString());
+  }
+
   /// Returns [AppUpdateInfo], which can be used to decide if
   /// [startFlexibleUpdate] or [performImmediateUpdate] should be called.
   static Future<AppPlayUpdateInfo> checkForUpdate() async {
@@ -102,6 +106,33 @@ class InAppPlayUpdate {
   static Future<void> completeFlexibleUpdate() async {
     return await _channel.invokeMethod('completeFlexibleUpdate');
   }
+
+  /// Installs the update status progress via [startFlexibleUpdate].
+  /// [checkFlexibleUpdateProgress] has to be check progress value.
+  static Future<AppUpdateResult> checkFlexibleUpdateProgress() async {
+    try {
+      await _channel.invokeMethod('checkFlexibleUpdateProgress');
+      return AppUpdateResult.success;
+    } on PlatformException catch (e) {
+      if (e.code == 'USER_DENIED_UPDATE') {
+        return AppUpdateResult.userDeniedUpdate;
+      } else if (e.code == 'IN_APP_UPDATE_FAILED') {
+        return AppUpdateResult.inAppUpdateFailed;
+      }
+
+      throw e;
+    }
+  }
+}
+
+class AppUpdateListener {
+  final String? byteDownload;
+  final String? totalByteDownload;
+
+  AppUpdateListener({
+    this.byteDownload,
+    this.totalByteDownload,
+  });
 }
 
 class AppPlayUpdateInfo {
@@ -114,29 +145,29 @@ class AppPlayUpdateInfo {
   final int? clientVersionStalenessDays;
 
   AppPlayUpdateInfo(
-      this.updateAvailability,
-      this.immediateUpdateAllowed,
-      this.flexibleUpdateAllowed,
-      this.availableVersionCode,
-      this.installStatus,
-      this.packageName,
-      this.clientVersionStalenessDays,
-      this.updatePriority,
-      );
+    this.updateAvailability,
+    this.immediateUpdateAllowed,
+    this.flexibleUpdateAllowed,
+    this.availableVersionCode,
+    this.installStatus,
+    this.packageName,
+    this.clientVersionStalenessDays,
+    this.updatePriority,
+  );
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-          other is AppPlayUpdateInfo &&
-              runtimeType == other.runtimeType &&
-              updateAvailability == other.updateAvailability &&
-              immediateUpdateAllowed == other.immediateUpdateAllowed &&
-              flexibleUpdateAllowed == other.flexibleUpdateAllowed &&
-              availableVersionCode == other.availableVersionCode &&
-              installStatus == other.installStatus &&
-              packageName == other.packageName &&
-              clientVersionStalenessDays == other.clientVersionStalenessDays &&
-              updatePriority == other.updatePriority;
+      other is AppPlayUpdateInfo &&
+          runtimeType == other.runtimeType &&
+          updateAvailability == other.updateAvailability &&
+          immediateUpdateAllowed == other.immediateUpdateAllowed &&
+          flexibleUpdateAllowed == other.flexibleUpdateAllowed &&
+          availableVersionCode == other.availableVersionCode &&
+          installStatus == other.installStatus &&
+          packageName == other.packageName &&
+          clientVersionStalenessDays == other.clientVersionStalenessDays &&
+          updatePriority == other.updatePriority;
 
   @override
   int get hashCode =>
@@ -150,7 +181,8 @@ class AppPlayUpdateInfo {
       updatePriority.hashCode;
 
   @override
-  String toString() => 'InAppUpdateState{updateAvailability: $updateAvailability, '
+  String toString() =>
+      'InAppUpdateState{updateAvailability: $updateAvailability, '
       'immediateUpdateAllowed: $immediateUpdateAllowed, '
       'flexibleUpdateAllowed: $flexibleUpdateAllowed, '
       'availableVersionCode: $availableVersionCode, '

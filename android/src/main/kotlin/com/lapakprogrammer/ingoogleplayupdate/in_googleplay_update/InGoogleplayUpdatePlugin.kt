@@ -1,36 +1,33 @@
 package com.lapakprogrammer.ingoogleplayupdate.in_googleplay_update
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.Activity.RESULT_CANCELED
 import android.app.Activity.RESULT_OK
 import android.app.Application
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.annotation.NonNull
 import com.google.android.play.core.appupdate.AppUpdateInfo
 import com.google.android.play.core.appupdate.AppUpdateManager
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
 import com.google.android.play.core.install.InstallStateUpdatedListener
-import com.google.android.play.core.install.model.ActivityResult
-import com.google.android.play.core.install.model.AppUpdateType
-import com.google.android.play.core.install.model.InstallStatus
-import com.google.android.play.core.install.model.InstallErrorCode
-import com.google.android.play.core.install.model.UpdateAvailability
+import com.google.android.play.core.install.model.*
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
-import io.flutter.plugin.common.MethodCall
-import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.*
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
-import io.flutter.plugin.common.PluginRegistry
+import com.google.gson.Gson
 
 interface ActivityProvider {
   fun addActivityResultListener(callback: PluginRegistry.ActivityResultListener)
   fun activity(): Activity?
 }
 
-class InAppUpdatePlugin : FlutterPlugin, MethodCallHandler,
+class InGoogleplayUpdatePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamHandler,
   PluginRegistry.ActivityResultListener, Application.ActivityLifecycleCallbacks, ActivityAware {
 
   companion object {
@@ -38,13 +35,21 @@ class InAppUpdatePlugin : FlutterPlugin, MethodCallHandler,
   }
 
   private lateinit var channel: MethodChannel
+  private lateinit var eventChannel: EventChannel
+  private var appUpdateEventSink: EventChannel.EventSink? = null
 
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
     channel = MethodChannel(
       flutterPluginBinding.binaryMessenger,
-      "in_app_update"
+      "in_googleplay_update"
     )
     channel.setMethodCallHandler(this)
+
+    eventChannel = EventChannel(
+      flutterPluginBinding.binaryMessenger,
+      "in_googleplay_update_event"
+    )
+    eventChannel.setStreamHandler(this)
   }
 
   override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
@@ -52,7 +57,6 @@ class InAppUpdatePlugin : FlutterPlugin, MethodCallHandler,
   }
 
   private var activityProvider: ActivityProvider? = null
-
   private var updateResult: Result? = null
   private var appUpdateType: Int? = null
   private var appUpdateInfo: AppUpdateInfo? = null
@@ -66,6 +70,14 @@ class InAppUpdatePlugin : FlutterPlugin, MethodCallHandler,
       "completeFlexibleUpdate" -> completeFlexibleUpdate(result)
       else -> result.notImplemented()
     }
+  }
+
+  override fun onCancel(arguments: Any?) {
+    appUpdateEventSink = null
+  }
+
+  override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+    appUpdateEventSink = events
   }
 
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
@@ -173,7 +185,7 @@ class InAppUpdatePlugin : FlutterPlugin, MethodCallHandler,
       result.error("REQUIRE_CHECK_FOR_UPDATE", "Call checkForUpdate first!", null)
     }
     requireNotNull(activityProvider?.activity()) {
-      result.error("REQUIRE_FOREGROUND_ACTIVITY", "in_app_update requires a foreground activity", null)
+      result.error("REQUIRE_FOREGROUND_ACTIVITY", "in_googleplay_update requires a foreground activity", null)
     }
     requireNotNull(appUpdateManager) {
       result.error("REQUIRE_CHECK_FOR_UPDATE", "Call checkForUpdate first!", null)
@@ -181,6 +193,7 @@ class InAppUpdatePlugin : FlutterPlugin, MethodCallHandler,
     block()
   }
 
+  @SuppressLint("LongLogTag")
   private fun startFlexibleUpdate(result: Result) = checkAppState(result) {
     appUpdateType = AppUpdateType.FLEXIBLE
     updateResult = result
@@ -191,21 +204,40 @@ class InAppUpdatePlugin : FlutterPlugin, MethodCallHandler,
       REQUEST_CODE_START_UPDATE
     )
 
-    // Create a listener to track request state updates.
     val installStateUpdatedListener = InstallStateUpdatedListener { state ->
       // (Optional) Provide a download progress bar.
       if (state.installStatus() == InstallStatus.DOWNLOADING) {
 
-        val totalBytes = object {
-          val bytesDownloaded = state.bytesDownloaded()
-          val totalBytesToDownload = state.totalBytesToDownload()
-          // object expressions extend Any, so `override` is required on `toString()`
-          override fun toString() = "$bytesDownloaded $totalBytesToDownload"
-        }
+        Log.d("FLEXIBLE_PROGRESS_UPDATE byte:", state.bytesDownloaded().toString());
+        Log.d("FLEXIBLE_PROGRESS_UPDATE total byte:", state.totalBytesToDownload().toString());
 
-        updateResult?.success(totalBytes);
+        val byteData = InGooglePlayByteData(
+          state.bytesDownloaded().toString(),
+          state.totalBytesToDownload().toString()
+        );
+
+        val byteJsonString = Gson().toJson(byteData)
+
+        appUpdateEventSink?.success(byteJsonString);
+
+        updateResult?.success(null)
+        updateResult = null
         // Show update progress bar.
       } else  if (state.installStatus() == InstallStatus.DOWNLOADED) {
+
+
+        Log.d("FLEXIBLE_PROGRESS_UPDATE byte:", state.bytesDownloaded().toString());
+        Log.d("FLEXIBLE_PROGRESS_UPDATE total byte:", state.totalBytesToDownload().toString());
+
+        val byteData = InGooglePlayByteData(
+          state.bytesDownloaded().toString(),
+          state.totalBytesToDownload().toString()
+        );
+
+        val byteJsonString = Gson().toJson(byteData)
+
+        appUpdateEventSink?.success(byteJsonString);
+
         updateResult?.success(null)
         updateResult = null
       } else if (state.installErrorCode() != InstallErrorCode.NO_ERROR) {
@@ -243,7 +275,7 @@ class InAppUpdatePlugin : FlutterPlugin, MethodCallHandler,
 
   private fun checkForUpdate(result: Result) {
     requireNotNull(activityProvider?.activity()) {
-      result.error("REQUIRE_FOREGROUND_ACTIVITY", "in_app_update requires a foreground activity", null)
+      result.error("REQUIRE_FOREGROUND_ACTIVITY", "in_googleplay_update requires a foreground activity", null)
     }
 
     activityProvider?.addActivityResultListener(this)

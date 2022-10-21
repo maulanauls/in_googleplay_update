@@ -23,6 +23,60 @@ The following methods are exposed:
 - `Future<void> performImmediateUpdate()`: Performs an immediate update (full-screen)
 - `Future<void> startFlexibleUpdate()`: Starts a flexible update (background download)
 - `Future<void> completeFlexibleUpdate()`: Actually installs an available flexible update
+- `Stream<String> flexibleUpdateStream()`: To listener flexible update state this return json string `bytes_downloaded: string, total_bytes_to_download` used this for make progress har download 
+example: flexible progressbar
+```dart
+StreamBuilder<String>(
+  stream: InAppPlayUpdate.flexibleUpdateStream(),
+  builder: (context, snapshot) {
+    if (snapshot.hasData) {
+      String byteStringDownload = snapshot.data ?? '{}';
+      final byteDownload = json.decode(byteStringDownload);
+      return Column(
+        children: [
+          if(int.parse(byteDownload['bytes_downloaded']) == 0 && int.parse(byteDownload['total_bytes_to_download']) == 0)...[
+            ElevatedButton(
+              onPressed: () {
+                InAppPlayUpdate.completeFlexibleUpdate().then((_) {
+                  showSnack("Success!");
+                }).catchError((e) {
+                  showSnack(e.toString());
+                });
+              },
+              child: const Text('Complete flexible update'),
+            ),
+          ] else...[
+            LinearProgressIndicator(
+              value: (int.parse(byteDownload['bytes_downloaded']) / int.parse(byteDownload['total_bytes_to_download'])),
+            ),
+            Text('${filesize(int.parse(byteDownload['bytes_downloaded']))}/${filesize(int.parse(byteDownload['total_bytes_to_download']))}',
+              style: const TextStyle(
+                  fontSize: 14
+              ),
+            )
+          ]
+        ],
+      );
+    } else {
+      return Column(
+        children: [
+          SizedBox(height: 10),
+          SizedBox(
+            width: 30,
+            height: 30,
+            child: CircularProgressIndicator(),
+          ),
+          Text('This loading for download flexible indicator',
+            style: const TextStyle(
+                fontSize: 14
+            ),
+          )
+        ],
+      );
+    }
+  },
+)
+```
 
 Please have a look in the example app on how to use it!
 
